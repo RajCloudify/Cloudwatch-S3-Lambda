@@ -7,7 +7,7 @@
                 "Service": "logs.ap-south-1.amazonaws.com"
             },
             "Action": "s3:GetBucketAcl",
-            "Resource": "arn:aws:s3:::asdfghjknk"
+            "Resource": "arn:aws:s3:::rajsbbuckett"
         },
         {
             "Effect": "Allow",
@@ -15,10 +15,10 @@
                 "Service": "logs.ap-south-1.amazonaws.com"
             },
             "Action": "s3:PutObject",
-            "Resource": "arn:aws:s3:::asdfghjknk/*",
+            "Resource": "arn:aws:s3:::rajsbbuckett/*",
             "Condition": {
                 "StringEquals": {
-                    "aws:SourceAccount": "908027386826",
+                    "aws:SourceAccount": "160885285928",
                     "s3:x-amz-acl": "bucket-owner-full-control"
                 }
             }
