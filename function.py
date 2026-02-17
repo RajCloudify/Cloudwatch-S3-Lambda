@@ -4,7 +4,7 @@ import json
 import time
 from datetime import datetime
 
-# Initialize AWS SDK clients
+# Initialize AWS SDK clients 
 logs_client = boto3.client('logs')
 s3_client = boto3.client('s3')
 
