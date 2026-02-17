@@ -6,7 +6,7 @@ from datetime import datetime
 
 # Initialize AWS SDK clients 
 logs_client = boto3.client('logs')
-s3_client = boto3.client('s3')
+s3_client = boto3.client('s3')   
 
 # S3 bucket name (update with your S3 bucket name) 
 S3_BUCKET_NAME = 'rajsbbuckett'
