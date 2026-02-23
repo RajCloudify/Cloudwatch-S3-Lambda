@@ -2,7 +2,7 @@ import boto3
 import gzip
 import json
 import time
-from datetime import datetime
+from datetime import datetime 
 
 # Initialize AWS SDK clients 
 logs_client = boto3.client('logs')
