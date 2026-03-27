@@ -7,9 +7,13 @@ For the full step-by-step implementation process, visit the detailed guide ---->
 
 ![Cloudwatch-Lambda-S3](https://github.com/user-attachments/assets/1baa6a5a-1d59-4e2f-8c31-85b76716d666)
 
-# ☁️ CloudWatch → S3 → Lambda Pipeline
+# ☁️ CloudWatch Logs to S3 Automation Using AWS Lambda
 
-A serverless AWS pipeline that **exports CloudWatch logs to S3** and triggers a **Lambda function** for automated log processing and monitoring.
+This project automates the process of exporting **Amazon CloudWatch Logs** to **Amazon S3** using an **AWS Lambda function** triggered by an **EventBridge Rule**. The Lambda function decodes and processes log data before storing it in the designated S3 bucket for archiving, analysis, or compliance purposes. This solution offers a scalable, serverless approach to automate log management with minimal maintenance effort.
+
+For the full step-by-step implementation process, visit the detailed guide ----> [Medium Article](https://medium.com/@rajattingal1/serverless-automation-automate-cloudwatch-logs-to-s3-with-lambda-event-rules-%EF%B8%8F-9ab330ae70fc)
+
+![Cloudwatch-Lambda-S3](https://github.com/user-attachments/assets/1baa6a5a-1d59-4e2f-8c31-85b76716d666)
 
 ---
 
@@ -19,15 +23,21 @@ A serverless AWS pipeline that **exports CloudWatch logs to S3** and triggers a 
 CloudWatch Logs
       │
       ▼
-  S3 Bucket  ──────►  Lambda Function
-  (Log Storage)         (Processing / Alerts)
+ EventBridge Rule
+      │
+      ▼
+  Lambda Function
+      │
+      ▼
+  S3 Bucket
+  (Log Storage)
 ```
 
 ### Flow:
 1. **CloudWatch** collects logs from AWS services / EC2 / applications
-2. **Export Task** sends logs to an **S3 Bucket**
-3. **S3 Event Trigger** invokes a **Lambda Function**
-4. **Lambda** processes, filters, or forwards the logs
+2. **EventBridge Rule** triggers the **Lambda Function** on a schedule or event
+3. **Lambda** decodes and processes the log data
+4. **S3 Bucket** stores the processed logs for archiving, analysis, or compliance
 
 ---
 
@@ -36,8 +46,9 @@ CloudWatch Logs
 | Service | Purpose |
 |---|---|
 | **Amazon CloudWatch** | Log collection and monitoring |
+| **Amazon EventBridge** | Scheduled rule to trigger Lambda |
+| **AWS Lambda** | Serverless log processing & export |
 | **Amazon S3** | Log storage and archival |
-| **AWS Lambda** | Serverless log processing |
 | **IAM** | Roles and permissions |
 
 ---
@@ -77,8 +88,6 @@ aws s3 mb s3://your-cloudwatch-logs-bucket --region us-east-1
 
 ### Step 2: Set S3 Bucket Policy
 
-Attach the bucket policy from `policies/s3-bucket-policy.json`:
-
 ```bash
 aws s3api put-bucket-policy \
   --bucket your-cloudwatch-logs-bucket \
@@ -93,14 +102,10 @@ aws s3api put-bucket-policy \
 aws iam create-role \
   --role-name CloudWatch-S3-Lambda-Role \
   --assume-role-policy-document file://policies/lambda-role-policy.json
-```
 
-Attach permissions:
-
-```bash
 aws iam attach-role-policy \
   --role-name CloudWatch-S3-Lambda-Role \
-  --policy-arn arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
+  --policy-arn arn:aws:iam::aws:policy/AmazonS3FullAccess
 
 aws iam attach-role-policy \
   --role-name CloudWatch-S3-Lambda-Role \
@@ -110,8 +115,6 @@ aws iam attach-role-policy \
 ---
 
 ### Step 4: Deploy Lambda Function
-
-Zip and upload the Lambda function:
 
 ```bash
 cd lambda
@@ -128,30 +131,17 @@ aws lambda create-function \
 
 ---
 
-### Step 5: Add S3 Trigger to Lambda
+### Step 5: Create EventBridge Rule
 
 ```bash
-aws lambda add-permission \
-  --function-name CloudWatch-S3-Processor \
-  --statement-id s3-trigger \
-  --action lambda:InvokeFunction \
-  --principal s3.amazonaws.com \
-  --source-arn arn:aws:s3:::your-cloudwatch-logs-bucket
-```
+aws events put-rule \
+  --name CloudWatch-Log-Export-Rule \
+  --schedule-expression "rate(1 day)" \
+  --state ENABLED
 
-Then configure the S3 bucket notification to trigger Lambda on object creation.
-
----
-
-### Step 6: Export CloudWatch Logs to S3
-
-```bash
-aws logs create-export-task \
-  --log-group-name "/aws/lambda/your-log-group" \
-  --from 1609459200000 \
-  --to 1609545600000 \
-  --destination your-cloudwatch-logs-bucket \
-  --destination-prefix "cloudwatch-exports/"
+aws events put-targets \
+  --rule CloudWatch-Log-Export-Rule \
+  --targets "Id=1,Arn=arn:aws:lambda:us-east-1:<ACCOUNT_ID>:function:CloudWatch-S3-Processor"
 ```
 
 ---
@@ -162,35 +152,38 @@ aws logs create-export-task \
 import json
 import boto3
 import gzip
+import base64
 
 def lambda_handler(event, context):
     s3 = boto3.client('s3')
-    
-    # Get bucket and file info from the S3 event
-    bucket = event['Records'][0]['s3']['bucket']['name']
-    key    = event['Records'][0]['s3']['object']['key']
-    
-    print(f"Processing log file: s3://{bucket}/{key}")
-    
-    # Download and read the log file
-    response = s3.get_object(Bucket=bucket, Key=key)
-    content  = gzip.decompress(response['Body'].read()).decode('utf-8')
-    
-    # Process logs
-    for line in content.splitlines():
-        print(line)  # Extend: send to SNS, filter errors, push to DB, etc.
-    
+
+    # Decode log data from CloudWatch via EventBridge
+    log_data = event.get('awslogs', {}).get('data', '')
+    if log_data:
+        decoded = gzip.decompress(base64.b64decode(log_data)).decode('utf-8')
+        log_events = json.loads(decoded)
+        print("Log Events:", log_events)
+
+    # Store processed logs in S3
+    bucket = 'your-cloudwatch-logs-bucket'
+    key = 'cloudwatch-exports/logs.json'
+
+    s3.put_object(
+        Bucket=bucket,
+        Key=key,
+        Body=json.dumps(log_events),
+        ContentType='application/json'
+    )
+
     return {
         'statusCode': 200,
-        'body': json.dumps('Logs processed successfully!')
+        'body': json.dumps('Logs exported to S3 successfully!')
     }
 ```
 
 ---
 
 ## 🔐 IAM Permissions Required
-
-Lambda needs the following permissions:
 
 ```json
 {
@@ -200,6 +193,7 @@ Lambda needs the following permissions:
       "Effect": "Allow",
       "Action": [
         "s3:GetObject",
+        "s3:PutObject",
         "s3:ListBucket"
       ],
       "Resource": [
@@ -212,7 +206,8 @@ Lambda needs the following permissions:
       "Action": [
         "logs:CreateLogGroup",
         "logs:CreateLogStream",
-        "logs:PutLogEvents"
+        "logs:PutLogEvents",
+        "logs:CreateExportTask"
       ],
       "Resource": "*"
     }
@@ -232,18 +227,20 @@ Lambda needs the following permissions:
 
 ## 🧹 Cleanup
 
-To avoid unnecessary AWS charges:
-
 ```bash
 # Delete Lambda function
 aws lambda delete-function --function-name CloudWatch-S3-Processor
+
+# Delete EventBridge rule
+aws events remove-targets --rule CloudWatch-Log-Export-Rule --ids 1
+aws events delete-rule --name CloudWatch-Log-Export-Rule
 
 # Empty and delete S3 bucket
 aws s3 rm s3://your-cloudwatch-logs-bucket --recursive
 aws s3 rb s3://your-cloudwatch-logs-bucket
 
 # Delete IAM role
-aws iam detach-role-policy --role-name CloudWatch-S3-Lambda-Role --policy-arn arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
+aws iam detach-role-policy --role-name CloudWatch-S3-Lambda-Role --policy-arn arn:aws:iam::aws:policy/AmazonS3FullAccess
 aws iam delete-role --role-name CloudWatch-S3-Lambda-Role
 ```
 
@@ -253,6 +250,7 @@ aws iam delete-role --role-name CloudWatch-S3-Lambda-Role
 
 **RajCloudify**
 - GitHub: [@RajCloudify](https://github.com/RajCloudify)
+- Medium: [@rajattingal1](https://medium.com/@rajattingal1)
 
 ---
 
