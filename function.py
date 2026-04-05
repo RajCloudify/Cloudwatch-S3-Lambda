@@ -20,7 +20,7 @@ def lambda_handler(event, context):
     timestamp = time.time()
     file_name = f'logs-{int(timestamp)}.json.gz'
     
-    # Get log events from CloudWatch
+    #  Get log events from CloudWatch
     log_events = []
     response = logs_client.get_log_events(
         logGroupName=LOG_GROUP,
