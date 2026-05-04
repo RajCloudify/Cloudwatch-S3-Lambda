@@ -51,5 +51,5 @@ def lambda_handler(event, context):
         'body': json.dumps('Logs exported successfully')
     }
  # type: ignore
-# Lambda code for puuling Logs to S3
+# Lambda code for pulling Logs to S3
 
